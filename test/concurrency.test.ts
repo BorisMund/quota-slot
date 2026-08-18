@@ -30,7 +30,7 @@ beforeAll(async () => {
 
   slots = createQuotaSlots({
     execute: pgExecutor(pool),
-    table: { table: "accounts", key: "id", counter: "parses_this_month" },
+    table: { table: "accounts", key: "id", counter: "units_this_month" },
   });
 }, 180_000);
 
@@ -149,7 +149,7 @@ describe("withSlot", () => {
         }
         return pgExecutor(pool)(sql, params);
       },
-      table: { table: "accounts", key: "id", counter: "parses_this_month" },
+      table: { table: "accounts", key: "id", counter: "units_this_month" },
       onReleaseError: (error) => seen.push(error),
     });
 

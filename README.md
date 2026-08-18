@@ -5,10 +5,10 @@ Take and give back units of a per-account quota in Postgres, without losing upda
 ```ts
 const slots = createQuotaSlots({
   execute: pgExecutor(pool),
-  table: { table: "accounts", key: "id", counter: "parses_this_month" },
+  table: { table: "accounts", key: "id", counter: "units_this_month" },
 });
 
-const invoice = await slots.withSlot(userId, 40, () => parseWithProvider(file));
+const result = await slots.withSlot(userId, 40, () => callTheProvider(file));
 ```
 
 Zero runtime dependencies. One statement per operation. No transaction is opened.
@@ -33,9 +33,9 @@ Let the check travel with the write:
 
 ```sql
 UPDATE accounts
-   SET parses_this_month = parses_this_month + 1
+   SET units_this_month = units_this_month + 1
  WHERE id = $1
-   AND parses_this_month < $2
+   AND units_this_month < $2
 ```
 
 Postgres locks the row for the duration of the update. A caller that shows up while another one is committing doesn't read a stale value. It waits, re-reads the row, and re-evaluates the `WHERE` clause against the new number. If the limit no longer holds, the statement matches nothing and reports zero affected rows.

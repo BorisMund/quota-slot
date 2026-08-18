@@ -31,7 +31,7 @@ beforeAll(async () => {
   await createAccountsTable(pool);
   slots = createQuotaSlots({
     execute: pgExecutor(pool),
-    table: { table: "accounts", key: "id", counter: "parses_this_month" },
+    table: { table: "accounts", key: "id", counter: "units_this_month" },
   });
 }, 180_000);
 
@@ -48,7 +48,7 @@ describe("read-modify-write", () => {
     const decisions = await Promise.all(
       Array.from({ length: ATTEMPTS }, async () => {
         const { rows } = await pool.query<{ used: number }>(
-          `SELECT parses_this_month AS used FROM accounts WHERE id = $1`,
+          `SELECT units_this_month AS used FROM accounts WHERE id = $1`,
           [ACCOUNT],
         );
         return Number(rows[0]?.used ?? 0) < LIMIT;
@@ -60,7 +60,7 @@ describe("read-modify-write", () => {
         .filter(Boolean)
         .map(() =>
           pool.query(
-            `UPDATE accounts SET parses_this_month = parses_this_month + 1 WHERE id = $1`,
+            `UPDATE accounts SET units_this_month = units_this_month + 1 WHERE id = $1`,
             [ACCOUNT],
           ),
         ),

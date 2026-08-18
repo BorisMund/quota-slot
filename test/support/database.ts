@@ -44,23 +44,23 @@ export async function createAccountsTable(pool: Pool): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accounts (
       id                 text PRIMARY KEY,
-      parses_this_month  integer NOT NULL DEFAULT 0
+      units_this_month  integer NOT NULL DEFAULT 0
     )
   `);
 }
 
 export async function insertAccount(pool: Pool, id: string): Promise<void> {
   await pool.query(
-    `INSERT INTO accounts (id, parses_this_month) VALUES ($1, 0)
-     ON CONFLICT (id) DO UPDATE SET parses_this_month = 0`,
+    `INSERT INTO accounts (id, units_this_month) VALUES ($1, 0)
+     ON CONFLICT (id) DO UPDATE SET units_this_month = 0`,
     [id],
   );
 }
 
 export async function readCounter(pool: Pool, id: string): Promise<number> {
-  const { rows } = await pool.query<{ parses_this_month: number }>(
-    `SELECT parses_this_month FROM accounts WHERE id = $1`,
+  const { rows } = await pool.query<{ units_this_month: number }>(
+    `SELECT units_this_month FROM accounts WHERE id = $1`,
     [id],
   );
-  return Number(rows[0]?.parses_this_month);
+  return Number(rows[0]?.units_this_month);
 }
