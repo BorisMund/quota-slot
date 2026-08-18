@@ -7,6 +7,7 @@ export type TakeResult = "granted" | "exhausted" | "unknown-account";
 /** Where the counter lives. One row per account, one integer column. */
 export interface QuotaTable {
   table: string;
+  /** Must be unique. Two rows for one key and `take` stops being able to count. */
   key: string;
   counter: string;
 }

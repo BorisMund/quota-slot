@@ -62,7 +62,7 @@ The interleaving in the first case is forced rather than hoped for: all readers,
 | Option | Meaning |
 |---|---|
 | `execute` | Runs one parameterized statement. `pgExecutor(pool)` adapts `pg`, and any other driver takes one line. |
-| `table` | `{ table, key, counter }`, where the counter lives. Names are checked at setup. |
+| `table` | `{ table, key, counter }`, where the counter lives. Names are checked at setup. The key column has to be unique. |
 | `onReleaseError` | Called when giving a unit back fails, so a failed release never replaces the error that caused it. |
 
 ### `take(key, limit): Promise<TakeResult>`
@@ -76,6 +76,8 @@ One of three answers:
 | `"unknown-account"` | There is no row for this key. |
 
 It does **not** throw on a spent quota. That's an expected outcome, and only the caller knows what it means: a `403` for someone waiting on a request, a silent skip for a background job that should keep going.
+
+This counts on one row per key. If the key column isn't unique, a single `UPDATE` touches several rows, `take` reports a refusal, and the counters have already moved. Put a unique constraint on it.
 
 The last two are worth keeping apart. A boolean would report a typo'd account id and a customer who used up their month as the same thing, and the first is a bug you want to hear about. Telling them apart costs a second query, but only on the refusal path: a granted unit is still one round-trip.
 
