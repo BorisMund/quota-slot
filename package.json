@@ -23,6 +23,14 @@
     "typecheck": "tsc -p tsconfig.test.json",
     "test": "vitest run"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BorisMund/quota-slot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/BorisMund/quota-slot/issues"
+  },
+  "homepage": "https://github.com/BorisMund/quota-slot#readme",
   "keywords": [
     "postgres",
     "quota",
