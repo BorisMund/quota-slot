@@ -1,10 +1,4 @@
-/**
- * Thrown by `withSlot` when the account has no unit left.
- *
- * `take` returns false instead of throwing. A spent quota is a normal outcome,
- * and only the caller knows what to do about it: a 403 for someone waiting on
- * a request, a skip for a background job that should keep going.
- */
+/** Thrown by `withSlot` when the account is at its limit. `take` returns "exhausted" instead. */
 export class QuotaExceededError extends Error {
   readonly key: string;
   readonly limit: number;
@@ -17,13 +11,7 @@ export class QuotaExceededError extends Error {
   }
 }
 
-/**
- * Thrown by `withSlot` when there is no quota row for the key.
- *
- * Separate from QuotaExceededError on purpose. A spent quota is the system
- * working, a missing row means the account was never set up, and the two need
- * different fixes.
- */
+/** Thrown by `withSlot` when there is no quota row for the key. */
 export class UnknownAccountError extends Error {
   readonly key: string;
 

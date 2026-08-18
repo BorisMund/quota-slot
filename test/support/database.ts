@@ -1,12 +1,7 @@
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import { Pool } from "pg";
 
-/**
- * Well under the 100 connections a default Postgres allows, with room for the
- * server's own reserved slots. The races here need concurrent statements, not
- * one connection per caller: fifty callers over twenty-five connections still
- * interleave, they just queue.
- */
+/** Well under the 100 connections a default Postgres allows. */
 const POOL_SIZE = 25;
 
 export interface TestDatabase {
@@ -15,14 +10,9 @@ export interface TestDatabase {
 }
 
 /**
- * A real Postgres, not a mock.
- *
- * Every claim this package makes is a claim about what the database does under
- * concurrency, and a mocked driver would only prove that the mock agrees with
- * us.
- *
- * DATABASE_URL wins if it is set, so CI can use a service container and you can
- * point at a local instance. Otherwise a throwaway container is started here.
+ * A real Postgres, because every claim here is a claim about what the database
+ * does under concurrency. DATABASE_URL wins if set, otherwise a throwaway
+ * container is started.
  */
 export async function startDatabase(): Promise<TestDatabase> {
   if (process.env["DATABASE_URL"]) {
@@ -50,7 +40,6 @@ export async function startDatabase(): Promise<TestDatabase> {
   };
 }
 
-/** One row per account. The shape this package expects, nothing more. */
 export async function createAccountsTable(pool: Pool): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accounts (

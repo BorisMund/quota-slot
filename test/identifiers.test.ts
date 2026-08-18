@@ -2,12 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import { createQuotaSlots, UnsafeIdentifierError } from "../src/index.js";
 
-/**
- * Table and column names get inlined into the SQL text because they cannot be
- * bound as parameters. These tests pin the only defence there is: reject
- * anything that is not a plain identifier, and reject it at setup rather than
- * at query time.
- */
+/** Identifiers are inlined into the SQL text, so this is the only defence. */
 const noopExecutor = async () => ({ rowCount: 0, rows: [] });
 
 describe("identifier validation", () => {

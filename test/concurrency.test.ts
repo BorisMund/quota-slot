@@ -50,18 +50,15 @@ describe("take under concurrency", () => {
 
     const granted = results.filter((result) => result === "granted").length;
 
-    // Exactly ten, not "about ten".
     expect(granted).toBe(LIMIT);
     expect(results.filter((result) => result === "exhausted")).toHaveLength(
       ATTEMPTS - LIMIT,
     );
-    // And the counter agrees: nothing was handed out without being recorded.
     expect(await readCounter(pool, "acc-1")).toBe(LIMIT);
   });
 
   it("keeps the counter consistent when takes and releases interleave", async () => {
-    // Twenty takes racing twenty releases. Whatever order they land in, the
-    // counter has to stay in range: never below zero, never above the limit.
+    // Whatever order they land in, the counter has to stay in range.
     await Promise.all(Array.from({ length: 20 }, () => slots.take("acc-1", LIMIT)));
     await Promise.all([
       ...Array.from({ length: 20 }, () => slots.take("acc-1", LIMIT)),
@@ -101,8 +98,7 @@ describe("an account that does not exist", () => {
   it("is reported apart from a spent quota", async () => {
     expect(await slots.take("missing", LIMIT)).toBe("unknown-account");
 
-    // Same refusal from the caller's side, different reason. A spent quota
-    // means the limit worked, a missing row means nobody created the account.
+    // Same refusal from the caller's side, different reason.
     await Promise.all(
       Array.from({ length: LIMIT }, () => slots.take("acc-1", LIMIT)),
     );
@@ -131,7 +127,6 @@ describe("withSlot", () => {
       }),
     ).rejects.toThrow("storage refused the file");
 
-    // The provider was never called, so the account keeps its unit.
     expect(await slots.usage("acc-1")).toBe(0);
   });
 

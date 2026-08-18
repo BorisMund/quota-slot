@@ -1,14 +1,9 @@
 import { UnsafeIdentifierError } from "./errors.js";
 
 /**
- * Table and column names can't travel as bound parameters. The driver would
- * send them as string literals and the statement wouldn't parse, so they have
- * to be inlined into the SQL text, which is where injection lives.
- *
- * So we check them once, at setup, against a narrow rule: letters, digits and
- * underscores, optionally schema-qualified with a single dot. Anything else is
- * rejected rather than escaped. A quota table called `weird name; drop table x`
- * is a bug worth failing on, not a case worth supporting.
+ * Table and column names can't be bound as parameters, so they end up inlined
+ * into the SQL text. Rejecting anything that isn't a plain identifier, once at
+ * setup, is the only defence there is.
  */
 const SAFE_PART = /^[A-Za-z_][A-Za-z0-9_]*$/;
 

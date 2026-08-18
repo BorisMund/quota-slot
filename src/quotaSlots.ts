@@ -2,87 +2,46 @@ import { QuotaExceededError, UnknownAccountError } from "./errors.js";
 import type { SqlExecutor } from "./executor.js";
 import { quoteIdentifier } from "./identifiers.js";
 
-/**
- * What came of asking for a unit.
- *
- * "exhausted" and "unknown-account" both mean you didn't get one, but they are
- * not the same problem: the first is the limit doing its job, the second is a
- * row that was never created, and returning false for both would hide a setup
- * bug behind a normal-looking refusal.
- */
 export type TakeResult = "granted" | "exhausted" | "unknown-account";
 
 /** Where the counter lives. One row per account, one integer column. */
 export interface QuotaTable {
-  /** Table holding the counter, optionally schema-qualified: `billing.accounts`. */
   table: string;
-  /** Column identifying the account. Must be unique, one row per key. */
   key: string;
-  /** Integer column counting units taken in the current window. */
   counter: string;
 }
 
 export interface QuotaSlotsOptions {
   execute: SqlExecutor;
   table: QuotaTable;
-  /**
-   * Called when giving a unit back fails. A failed release shouldn't replace
-   * the error that caused the rollback, so it's reported here instead of being
-   * thrown. Defaults to silence, which is the reason this hook exists.
-   */
+  /** Called when a release fails, so it can't replace the error that caused it. */
   onReleaseError?: (error: unknown, key: string) => void;
 }
 
 export interface QuotaSlots {
-  /**
-   * Take one unit if the account is still under `limit`.
-   * Doesn't throw: a spent quota is an expected outcome, and only the caller
-   * knows whether that's a 403 or a job that should quietly move on.
-   */
   take(key: string, limit: number): Promise<TakeResult>;
-
-  /**
-   * Give one unit back. Only for work that never happened: the upload was
-   * refused, the provider was down. Work that ran and failed has been paid for
-   * and keeps its unit.
-   */
+  /** Only for work that never happened. Work that ran and failed keeps its unit. */
   release(key: string): Promise<void>;
-
-  /** Units taken so far, or null if the account row doesn't exist. */
+  /** Units taken so far, or null when the row doesn't exist. */
   usage(key: string): Promise<number | null>;
-
-  /**
-   * Take a unit, run `work`, give the unit back if `work` throws.
-   * Throws QuotaExceededError when nothing is left, UnknownAccountError when
-   * there is no row for the key.
-   */
   withSlot<T>(key: string, limit: number, work: () => Promise<T>): Promise<T>;
 }
 
 export function createQuotaSlots(options: QuotaSlotsOptions): QuotaSlots {
   const { execute, table, onReleaseError } = options;
 
-  // Checked once here so a typo fails on startup, not on the first request
-  // that touches the quota.
   const tableName = quoteIdentifier(table.table, "table");
   const keyColumn = quoteIdentifier(table.key, "key column");
   const counterColumn = quoteIdentifier(table.counter, "counter column");
 
-  // The point of the whole package.
-  //
-  // Reading the counter, comparing it in the application and writing it back
-  // loses updates: concurrent callers read the same value, all pass the check,
-  // and the limit is overspent. Here the check is part of the write. Postgres
-  // locks the row, so a caller that shows up while another one is committing
-  // re-reads the row and re-evaluates WHERE against the new value. Losers match
-  // nothing and get rowCount 0. No transaction involved.
+  // The whole idea. The limit check travels with the write, so Postgres locks
+  // the row and re-evaluates WHERE against the committed value. Callers that
+  // lose the race match nothing and get rowCount 0.
   const takeSql =
     `UPDATE ${tableName} SET ${counterColumn} = ${counterColumn} + 1 ` +
     `WHERE ${keyColumn} = $1 AND ${counterColumn} < $2`;
 
-  // The `> 0` guard keeps the counter off negative numbers if the window was
-  // reset between the take and the release. Losing one unit beats showing an
-  // account negative usage.
+  // `> 0` in case the window was reset between the take and the release.
   const releaseSql =
     `UPDATE ${tableName} SET ${counterColumn} = ${counterColumn} - 1 ` +
     `WHERE ${keyColumn} = $1 AND ${counterColumn} > 0`;
@@ -96,11 +55,8 @@ export function createQuotaSlots(options: QuotaSlotsOptions): QuotaSlots {
       return "granted";
     }
 
-    // Nothing matched, and the statement can't say whether that was the limit
-    // or a missing row. Finding out costs a second query, but only here: the
-    // granted path stays one round-trip, and refusals are the rare case.
-    // If the row is created or dropped in between, this reports what was true
-    // when it looked.
+    // Refusals only: one extra query to say which refusal it was. The granted
+    // path stays a single round-trip.
     const used = await usage(key);
     return used === null ? "unknown-account" : "exhausted";
   }
@@ -115,7 +71,7 @@ export function createQuotaSlots(options: QuotaSlotsOptions): QuotaSlots {
     if (!row) {
       return null;
     }
-    // Postgres sends integer as a number and bigint as a string. Take both.
+    // Postgres sends integer as a number and bigint as a string.
     return Number(row["used"]);
   }
 
@@ -135,8 +91,6 @@ export function createQuotaSlots(options: QuotaSlotsOptions): QuotaSlots {
     try {
       return await work();
     } catch (error) {
-      // Best effort. Whatever went wrong inside `work` is the error the caller
-      // came for, so a broken release goes to the hook and not up the stack.
       try {
         await release(key);
       } catch (releaseError) {

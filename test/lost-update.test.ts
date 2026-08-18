@@ -12,13 +12,10 @@ import {
 } from "./support/database.js";
 
 /**
- * The test that explains why this package exists.
- *
- * It does the obvious thing (read the counter, compare it in the application,
- * write it back) and shows the limit being overspent. The interleaving is
- * forced rather than hoped for: every reader first, then every writer. That is
- * the worst case, it is what a batch arriving at once produces, and pinning it
- * keeps the test from going flaky.
+ * The test that explains why this package exists: read-compare-write next to
+ * the conditional UPDATE, same race, fifty callers against a limit of ten.
+ * All readers go first and then all writers, so the overspend is forced
+ * rather than hoped for.
  */
 const ACCOUNT = "acc-2";
 const LIMIT = 10;
@@ -48,7 +45,6 @@ beforeEach(async () => {
 
 describe("read-modify-write", () => {
   it("overspends the limit when every caller checks before anyone writes", async () => {
-    // Phase 1: all fifty read, and each one sees 0 used out of 10.
     const decisions = await Promise.all(
       Array.from({ length: ATTEMPTS }, async () => {
         const { rows } = await pool.query<{ used: number }>(
@@ -59,7 +55,6 @@ describe("read-modify-write", () => {
       }),
     );
 
-    // Phase 2: everyone who passed the check writes.
     await Promise.all(
       decisions
         .filter(Boolean)
