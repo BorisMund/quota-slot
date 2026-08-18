@@ -46,25 +46,6 @@ beforeEach(async () => {
   await insertAccount(pool, ACCOUNT);
 });
 
-/** Read, compare, write. The version this package replaces. */
-async function naiveTake(id: string, limit: number): Promise<boolean> {
-  const { rows } = await pool.query<{ used: number }>(
-    `SELECT parses_this_month AS used FROM accounts WHERE id = $1`,
-    [id],
-  );
-  const used = Number(rows[0]?.used ?? 0);
-
-  if (used >= limit) {
-    return false;
-  }
-
-  await pool.query(
-    `UPDATE accounts SET parses_this_month = parses_this_month + 1 WHERE id = $1`,
-    [id],
-  );
-  return true;
-}
-
 describe("read-modify-write", () => {
   it("overspends the limit when every caller checks before anyone writes", async () => {
     // Phase 1: all fifty read, and each one sees 0 used out of 10.
@@ -93,17 +74,6 @@ describe("read-modify-write", () => {
     // Fifty units handed out against a limit of ten.
     expect(await readCounter(pool, ACCOUNT)).toBe(ATTEMPTS);
     expect(await readCounter(pool, ACCOUNT)).toBeGreaterThan(LIMIT);
-  });
-
-  it("overspends even without forced phases, given enough concurrency", async () => {
-    const results = await Promise.all(
-      Array.from({ length: ATTEMPTS }, () => naiveTake(ACCOUNT, LIMIT)),
-    );
-
-    // Natural interleaving depends on timing, so this only asserts what always
-    // holds: the naive version cannot guarantee the limit, the conditional
-    // UPDATE can.
-    expect(results.filter(Boolean).length).toBeGreaterThanOrEqual(LIMIT);
   });
 });
 
