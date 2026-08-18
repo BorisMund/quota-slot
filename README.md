@@ -118,6 +118,7 @@ What the counter buys instead is the whole point of this package: one row, one s
 ## Not included
 
 - **Window resets.** Rolling months, calendar months and grace periods are policy, and policy belongs to your application. This package only moves the number.
+- **Isolation levels other than READ COMMITTED.** Under REPEATABLE READ or SERIALIZABLE the same `UPDATE` doesn't quietly lose the race, it fails with a serialization error (`40001`), and retrying is the caller's job. This package assumes the default and doesn't retry.
 - **Databases other than Postgres.** The `UPDATE ... WHERE` trick is standard SQL, but the re-evaluation guarantee described above is specific to how Postgres implements READ COMMITTED. MySQL and SQLite behave differently enough to deserve their own tests before anyone makes a claim about them.
 - **Multi-unit reservations.** Taking three units at once needs a different statement. Open an issue if you need it.
 
