@@ -17,6 +17,23 @@ export class QuotaExceededError extends Error {
   }
 }
 
+/**
+ * Thrown by `withSlot` when there is no quota row for the key.
+ *
+ * Separate from QuotaExceededError on purpose. A spent quota is the system
+ * working, a missing row means the account was never set up, and the two need
+ * different fixes.
+ */
+export class UnknownAccountError extends Error {
+  readonly key: string;
+
+  constructor(key: string) {
+    super(`No quota row for "${key}": the row has to exist before it can spend anything.`);
+    this.name = "UnknownAccountError";
+    this.key = key;
+  }
+}
+
 /** Thrown at setup time for a table or column name we won't inline into SQL. */
 export class UnsafeIdentifierError extends Error {
   constructor(role: string, value: string) {

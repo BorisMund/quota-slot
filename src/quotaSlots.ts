@@ -1,6 +1,16 @@
-import { QuotaExceededError } from "./errors.js";
+import { QuotaExceededError, UnknownAccountError } from "./errors.js";
 import type { SqlExecutor } from "./executor.js";
 import { quoteIdentifier } from "./identifiers.js";
+
+/**
+ * What came of asking for a unit.
+ *
+ * "exhausted" and "unknown-account" both mean you didn't get one, but they are
+ * not the same problem: the first is the limit doing its job, the second is a
+ * row that was never created, and returning false for both would hide a setup
+ * bug behind a normal-looking refusal.
+ */
+export type TakeResult = "granted" | "exhausted" | "unknown-account";
 
 /** Where the counter lives. One row per account, one integer column. */
 export interface QuotaTable {
@@ -26,9 +36,10 @@ export interface QuotaSlotsOptions {
 export interface QuotaSlots {
   /**
    * Take one unit if the account is still under `limit`.
-   * True when the unit is ours, false when the quota is spent.
+   * Doesn't throw: a spent quota is an expected outcome, and only the caller
+   * knows whether that's a 403 or a job that should quietly move on.
    */
-  take(key: string, limit: number): Promise<boolean>;
+  take(key: string, limit: number): Promise<TakeResult>;
 
   /**
    * Give one unit back. Only for work that never happened: the upload was
@@ -42,7 +53,8 @@ export interface QuotaSlots {
 
   /**
    * Take a unit, run `work`, give the unit back if `work` throws.
-   * Throws QuotaExceededError when nothing is left.
+   * Throws QuotaExceededError when nothing is left, UnknownAccountError when
+   * there is no row for the key.
    */
   withSlot<T>(key: string, limit: number, work: () => Promise<T>): Promise<T>;
 }
@@ -77,10 +89,20 @@ export function createQuotaSlots(options: QuotaSlotsOptions): QuotaSlots {
 
   const usageSql = `SELECT ${counterColumn} AS used FROM ${tableName} WHERE ${keyColumn} = $1`;
 
-  async function take(key: string, limit: number): Promise<boolean> {
+  async function take(key: string, limit: number): Promise<TakeResult> {
     assertLimit(limit);
     const { rowCount } = await execute(takeSql, [key, limit]);
-    return rowCount === 1;
+    if (rowCount === 1) {
+      return "granted";
+    }
+
+    // Nothing matched, and the statement can't say whether that was the limit
+    // or a missing row. Finding out costs a second query, but only here: the
+    // granted path stays one round-trip, and refusals are the rare case.
+    // If the row is created or dropped in between, this reports what was true
+    // when it looked.
+    const used = await usage(key);
+    return used === null ? "unknown-account" : "exhausted";
   }
 
   async function release(key: string): Promise<void> {
@@ -103,7 +125,10 @@ export function createQuotaSlots(options: QuotaSlotsOptions): QuotaSlots {
     work: () => Promise<T>,
   ): Promise<T> {
     const taken = await take(key, limit);
-    if (!taken) {
+    if (taken === "unknown-account") {
+      throw new UnknownAccountError(key);
+    }
+    if (taken === "exhausted") {
       throw new QuotaExceededError(key, limit);
     }
 

@@ -83,7 +83,7 @@ describe("conditional update, same race", () => {
       Array.from({ length: ATTEMPTS }, () => slots.take(ACCOUNT, LIMIT)),
     );
 
-    expect(results.filter(Boolean).length).toBe(LIMIT);
+    expect(results.filter((result) => result === "granted").length).toBe(LIMIT);
     expect(await readCounter(pool, ACCOUNT)).toBe(LIMIT);
   });
 });

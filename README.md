@@ -65,9 +65,19 @@ The interleaving in the first case is forced rather than hoped for: all readers,
 | `table` | `{ table, key, counter }`, where the counter lives. Names are checked at setup. |
 | `onReleaseError` | Called when giving a unit back fails, so a failed release never replaces the error that caused it. |
 
-### `take(key, limit): Promise<boolean>`
+### `take(key, limit): Promise<TakeResult>`
 
-`true` when the unit is yours. It does **not** throw on a spent quota. That's an expected outcome, and only the caller knows what it means: a `403` for someone waiting on a request, a silent skip for a background job that should keep going.
+One of three answers:
+
+| | Meaning |
+|---|---|
+| `"granted"` | The unit is yours. |
+| `"exhausted"` | The account is at its limit. |
+| `"unknown-account"` | There is no row for this key. |
+
+It does **not** throw on a spent quota. That's an expected outcome, and only the caller knows what it means: a `403` for someone waiting on a request, a silent skip for a background job that should keep going.
+
+The last two are worth keeping apart. A boolean would report a typo'd account id and a customer who used up their month as the same thing, and the first is a bug you want to hear about. Telling them apart costs a second query, but only on the refusal path: a granted unit is still one round-trip.
 
 ### `release(key): Promise<void>`
 
@@ -82,6 +92,8 @@ It's guarded by `counter > 0`, so a window reset landing between the take and th
 ### `withSlot(key, limit, work)`
 
 Take, run, and give the unit back if `work` throws. Rethrows the original error, and a failure inside the rollback goes to `onReleaseError` instead of replacing it.
+
+Throws `QuotaExceededError` when the account is at its limit and `UnknownAccountError` when there's no row for the key.
 
 ## Why not a transaction
 

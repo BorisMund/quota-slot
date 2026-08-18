@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import type { Pool } from "pg";
 
-import { createQuotaSlots, pgExecutor, QuotaExceededError } from "../src/index.js";
+import {
+  createQuotaSlots,
+  pgExecutor,
+  QuotaExceededError,
+  UnknownAccountError,
+} from "../src/index.js";
 import type { QuotaSlots } from "../src/index.js";
 import {
   createAccountsTable,
@@ -43,11 +48,13 @@ describe("take under concurrency", () => {
       Array.from({ length: ATTEMPTS }, () => slots.take("acc-1", LIMIT)),
     );
 
-    const granted = results.filter(Boolean).length;
+    const granted = results.filter((result) => result === "granted").length;
 
     // Exactly ten, not "about ten".
     expect(granted).toBe(LIMIT);
-    expect(results.filter((ok) => !ok)).toHaveLength(ATTEMPTS - LIMIT);
+    expect(results.filter((result) => result === "exhausted")).toHaveLength(
+      ATTEMPTS - LIMIT,
+    );
     // And the counter agrees: nothing was handed out without being recorded.
     expect(await readCounter(pool, "acc-1")).toBe(LIMIT);
   });
@@ -87,6 +94,25 @@ describe("release", () => {
 describe("usage", () => {
   it("returns null for an account that does not exist", async () => {
     expect(await slots.usage("missing")).toBeNull();
+  });
+});
+
+describe("an account that does not exist", () => {
+  it("is reported apart from a spent quota", async () => {
+    expect(await slots.take("missing", LIMIT)).toBe("unknown-account");
+
+    // Same refusal from the caller's side, different reason. A spent quota
+    // means the limit worked, a missing row means nobody created the account.
+    await Promise.all(
+      Array.from({ length: LIMIT }, () => slots.take("acc-1", LIMIT)),
+    );
+    expect(await slots.take("acc-1", LIMIT)).toBe("exhausted");
+  });
+
+  it("makes withSlot throw UnknownAccountError, not QuotaExceededError", async () => {
+    await expect(
+      slots.withSlot("missing", LIMIT, async () => "never runs"),
+    ).rejects.toBeInstanceOf(UnknownAccountError);
   });
 });
 
