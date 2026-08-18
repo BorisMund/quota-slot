@@ -1,6 +1,14 @@
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import { Pool } from "pg";
 
+/**
+ * Well under the 100 connections a default Postgres allows, with room for the
+ * server's own reserved slots. The races here need concurrent statements, not
+ * one connection per caller: fifty callers over twenty-five connections still
+ * interleave, they just queue.
+ */
+const POOL_SIZE = 25;
+
 export interface TestDatabase {
   pool: Pool;
   stop: () => Promise<void>;
@@ -20,7 +28,7 @@ export async function startDatabase(): Promise<TestDatabase> {
   if (process.env["DATABASE_URL"]) {
     const pool = new Pool({
       connectionString: process.env["DATABASE_URL"],
-      max: 60,
+      max: POOL_SIZE,
     });
     return {
       pool,
@@ -31,7 +39,7 @@ export async function startDatabase(): Promise<TestDatabase> {
   }
 
   const container = await new PostgreSqlContainer("postgres:16-alpine").start();
-  const pool = new Pool({ connectionString: container.getConnectionUri(), max: 60 });
+  const pool = new Pool({ connectionString: container.getConnectionUri(), max: POOL_SIZE });
 
   return {
     pool,
